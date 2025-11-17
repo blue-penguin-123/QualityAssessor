@@ -1,0 +1,16 @@
+.DS_Store
+pyproject.toml
+setup.py
+quality_assessor/__init__.py
+quality_assessor/cochrane_rob_assessor.py
+quality_assessor/grade_assessor.py
+quality_assessor/robins_i_assessor.py
+quality_assessor.egg-info/PKG-INFO
+quality_assessor.egg-info/SOURCES.txt
+quality_assessor.egg-info/dependency_links.txt
+quality_assessor.egg-info/requires.txt
+quality_assessor.egg-info/top_level.txt
+tests/__init__.py
+tests/test_cochrane_rob_assessor.py
+tests/test_grade_asessor.py
+tests/test_robins_i_assessor.py

@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: quality-assessor
+Version: 1.0.0
+Summary: Unified quality assessment module for evidence-based medicine (GRADE, Cochrane RoB 2.0, ROBINS-I)
+Author: blue-penguin-123
+License: MIT
+Project-URL: Homepage, https://github.com/blue-penguin-123/QualityAssessor
+Project-URL: Repository, https://github.com/blue-penguin-123/QualityAssessor
+Project-URL: Issues, https://github.com/blue-penguin-123/QualityAssessor/issues
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Healthcare Industry
+Classifier: Topic :: Scientific/Engineering :: Medical Science Apps.
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.0
+Dynamic: requires-python
