@@ -3,22 +3,11 @@ ROBINS-I (Risk Of Bias In Non-randomized Studies - of Interventions) assessor.
 
 Implements ROBINS-I methodology for assessing risk of bias in non-randomized
 intervention studies.
+This is a standalone, framework-agnostic implementation.
 """
 
 import logging
-from typing import Optional
-
-from eqas.models.input import PaperInput
-from eqas.models.study import StudyCharacteristics, StudyDesign
-from eqas.models.assessments import (
-    ROBINSIAssessment,
-    ROBINSIDomainAssessment,
-    ROBINSIDomain,
-    ROBINSILevel
-)
-from eqas.llm.claude_provider import ClaudeProvider
-from eqas.llm.prompts import MedicalPrompts
-from eqas.exceptions import AssessmentError
+from typing import Any, Dict, Type, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +15,9 @@ logger = logging.getLogger(__name__)
 class ROBINSIAssessor:
     """
     Implements ROBINS-I for non-randomized studies of interventions.
+
+    This is a generic assessor that works with dependency injection.
+    All dependencies (models, prompts, LLM provider, exceptions) are passed in.
 
     ROBINS-I is applicable to:
     - Cohort studies (prospective and retrospective)
@@ -44,28 +36,41 @@ class ROBINSIAssessor:
     or exposure effects.
     """
 
-    # Study designs where ROBINS-I is applicable
-    APPLICABLE_DESIGNS = [
-        StudyDesign.COHORT,
-        StudyDesign.CASE_CONTROL,
-        StudyDesign.CASE_SERIES,  # When comparison groups exist
-    ]
-
-    def __init__(self, llm_provider: ClaudeProvider):
+    def __init__(
+        self,
+        llm_provider: Any,
+        prompt_template: str,
+        models: Dict[str, Type],
+        exception_class: Type[Exception] = Exception,
+        applicable_designs: Optional[List[Any]] = None
+    ):
         """
         Initialize ROBINS-I assessor.
 
         Args:
-            llm_provider: LLM provider instance
+            llm_provider: LLM provider instance with complete_with_json method
+            prompt_template: Prompt template string for ROBINS-I assessment
+            models: Dictionary mapping model names to model classes:
+                - 'ROBINSIDomain': Enum for ROBINS-I domains
+                - 'ROBINSILevel': Enum for bias levels
+                - 'ROBINSIDomainAssessment': Domain assessment model
+                - 'ROBINSIAssessment': Overall assessment model
+                - 'StudyDesign': Enum for study designs
+            exception_class: Exception class to raise on errors (default: Exception)
+            applicable_designs: List of study designs where ROBINS-I is applicable
         """
         self.llm = llm_provider
+        self.prompt_template = prompt_template
+        self.models = models
+        self.exception_class = exception_class
+        self.applicable_designs = applicable_designs or []
         logger.info("ROBINSIAssessor initialized")
 
     def assess_study(
         self,
-        paper: PaperInput,
-        characteristics: StudyCharacteristics
-    ) -> ROBINSIAssessment:
+        paper: Any,
+        characteristics: Any
+    ) -> Any:
         """
         Perform ROBINS-I assessment.
 
@@ -86,9 +91,11 @@ class ROBINSIAssessor:
         if not characteristics:
             raise ValueError("characteristics cannot be None")
 
+        StudyDesign = self.models['StudyDesign']
+
         # Check if study design is applicable
-        if characteristics.study_design not in self.APPLICABLE_DESIGNS:
-            raise AssessmentError(
+        if self.applicable_designs and characteristics.study_design not in self.applicable_designs:
+            raise self.exception_class(
                 f"ROBINS-I is only applicable to non-randomized intervention studies "
                 f"(cohort, case-control, case series with comparisons). "
                 f"Study design: {characteristics.study_design}. "
@@ -101,7 +108,7 @@ class ROBINSIAssessor:
             )
 
             # Special note for case series
-            if characteristics.study_design == StudyDesign.CASE_SERIES:
+            if hasattr(StudyDesign, 'CASE_SERIES') and characteristics.study_design == StudyDesign.CASE_SERIES:
                 logger.info(
                     "Note: ROBINS-I assessment of case series works best when "
                     "comparison groups exist (e.g., different exposure levels, "
@@ -135,7 +142,7 @@ class ROBINSIAssessor:
             outcome = characteristics.primary_outcome or "not specified"
 
             # Format prompt
-            prompt = MedicalPrompts.ROBINS_I_ASSESSMENT.format(
+            prompt = self.prompt_template.format(
                 study_design=characteristics.study_design,
                 population=population[:500],
                 intervention=intervention[:500],
@@ -155,6 +162,12 @@ class ROBINSIAssessor:
             )
 
             data = response["json_data"]
+
+            # Get model classes
+            ROBINSIDomain = self.models['ROBINSIDomain']
+            ROBINSILevel = self.models['ROBINSILevel']
+            ROBINSIDomainAssessment = self.models['ROBINSIDomainAssessment']
+            ROBINSIAssessment = self.models['ROBINSIAssessment']
 
             # Parse target trial description
             target_trial = data.get("target_trial", "")
@@ -211,25 +224,25 @@ class ROBINSIAssessor:
             return assessment
 
         except KeyError as e:
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Failed to parse ROBINS-I assessment: missing key {e}"
             ) from e
 
         except ValueError as e:
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Invalid ROBINS-I assessment value: {e}"
             ) from e
 
         except Exception as e:
             logger.error(f"Error in ROBINS-I assessment: {e}", exc_info=True)
-            raise AssessmentError(
+            raise self.exception_class(
                 f"ROBINS-I assessment failed: {e}"
             ) from e
 
     def _apply_robins_i_algorithm(
         self,
-        domain_assessments: list[ROBINSIDomainAssessment]
-    ) -> ROBINSILevel:
+        domain_assessments: List[Any]
+    ) -> Any:
         """
         Apply ROBINS-I algorithm to determine overall bias.
 
@@ -246,6 +259,8 @@ class ROBINSIAssessor:
         Returns:
             Overall bias level
         """
+        ROBINSILevel = self.models['ROBINSILevel']
+
         domain_levels = [d.level for d in domain_assessments]
 
         # Check for critical
