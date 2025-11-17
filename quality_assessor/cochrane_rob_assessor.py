@@ -2,43 +2,55 @@
 Cochrane Risk of Bias 2.0 assessor for RCTs.
 
 Implements Cochrane RoB 2.0 methodology for assessing risk of bias.
+This is a standalone, framework-agnostic implementation.
 """
 
 import logging
-
-from eqas.models.input import PaperInput
-from eqas.models.study import StudyCharacteristics, StudyDesign
-from eqas.models.assessments import (
-    CochraneRoBAssessment,
-    RoBDomainAssessment,
-    RoBDomain,
-    RoBJudgment
-)
-from eqas.llm.claude_provider import ClaudeProvider
-from eqas.llm.prompts import MedicalPrompts
-from eqas.exceptions import AssessmentError
+from typing import Any, Dict, Type, List
 
 logger = logging.getLogger(__name__)
 
 
 class CochraneRoBAssessor:
-    """Implements Cochrane Risk of Bias 2.0 for RCTs."""
+    """
+    Implements Cochrane Risk of Bias 2.0 for RCTs.
 
-    def __init__(self, llm_provider: ClaudeProvider):
+    This is a generic assessor that works with dependency injection.
+    All dependencies (models, prompts, LLM provider, exceptions) are passed in.
+    """
+
+    def __init__(
+        self,
+        llm_provider: Any,
+        prompt_template: str,
+        models: Dict[str, Type],
+        exception_class: Type[Exception] = Exception
+    ):
         """
         Initialize Cochrane RoB assessor.
 
         Args:
-            llm_provider: LLM provider instance
+            llm_provider: LLM provider instance with complete_with_json method
+            prompt_template: Prompt template string for Cochrane RoB assessment
+            models: Dictionary mapping model names to model classes:
+                - 'RoBDomain': Enum for RoB domains
+                - 'RoBJudgment': Enum for RoB judgments
+                - 'RoBDomainAssessment': Domain assessment model
+                - 'CochraneRoBAssessment': Overall assessment model
+                - 'StudyDesign': Enum for study designs
+            exception_class: Exception class to raise on errors (default: Exception)
         """
         self.llm = llm_provider
+        self.prompt_template = prompt_template
+        self.models = models
+        self.exception_class = exception_class
         logger.info("CochraneRoBAssessor initialized")
 
     def assess_study(
         self,
-        paper: PaperInput,
-        characteristics: StudyCharacteristics
-    ) -> CochraneRoBAssessment:
+        paper: Any,
+        characteristics: Any
+    ) -> Any:
         """
         Perform Cochrane RoB 2.0 assessment.
 
@@ -60,8 +72,9 @@ class CochraneRoBAssessor:
         if not characteristics:
             raise ValueError("characteristics cannot be None")
 
+        StudyDesign = self.models['StudyDesign']
         if characteristics.study_design != StudyDesign.RCT:
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Cochrane RoB 2.0 is only applicable to RCTs. "
                 f"Study design: {characteristics.study_design}"
             )
@@ -91,7 +104,7 @@ class CochraneRoBAssessor:
                 logger.warning("No results section found")
 
             # Format prompt
-            prompt = MedicalPrompts.COCHRANE_ROB_RCT.format(
+            prompt = self.prompt_template.format(
                 title=title,
                 methods=methods[:4000],
                 results=results[:2000]
@@ -108,6 +121,11 @@ class CochraneRoBAssessor:
             data = response["json_data"]
 
             # Parse domain assessments
+            RoBDomain = self.models['RoBDomain']
+            RoBJudgment = self.models['RoBJudgment']
+            RoBDomainAssessment = self.models['RoBDomainAssessment']
+            CochraneRoBAssessment = self.models['CochraneRoBAssessment']
+
             domain_assessments = []
             for domain_data in data["domains"]:
                 domain_enum = RoBDomain(domain_data["domain"])
@@ -149,25 +167,25 @@ class CochraneRoBAssessor:
             return assessment
 
         except KeyError as e:
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Failed to parse RoB assessment: missing key {e}"
             ) from e
 
         except ValueError as e:
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Invalid RoB assessment value: {e}"
             ) from e
 
         except Exception as e:
             logger.error(f"Error in RoB assessment: {e}", exc_info=True)
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Cochrane RoB assessment failed: {e}"
             ) from e
 
     def _apply_rob_algorithm(
         self,
-        domain_assessments: list[RoBDomainAssessment]
-    ) -> RoBJudgment:
+        domain_assessments: List[Any]
+    ) -> Any:
         """
         Apply Cochrane RoB 2.0 algorithm to determine overall risk.
 
@@ -188,6 +206,8 @@ class CochraneRoBAssessor:
         Returns:
             Overall risk judgment
         """
+        RoBJudgment = self.models['RoBJudgment']
+
         domain_risks = [d.judgment for d in domain_assessments]
 
         # Create domain map for easier checking

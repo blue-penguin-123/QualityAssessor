@@ -2,45 +2,56 @@
 GRADE (Grading of Recommendations Assessment, Development and Evaluation) assessor.
 
 Implements GRADE methodology for assessing quality of evidence.
+This is a standalone, framework-agnostic implementation.
 """
 
 import logging
-from typing import Optional
-
-from eqas.models.input import PaperInput, Hypothesis
-from eqas.models.study import StudyCharacteristics, StudyDesign
-from eqas.models.assessments import (
-    GRADEAssessment,
-    GRADEDomainAssessment,
-    GRADELevel,
-    GRADEDomain
-)
-from eqas.llm.claude_provider import ClaudeProvider
-from eqas.llm.prompts import MedicalPrompts
-from eqas.exceptions import AssessmentError
+from typing import Any, Optional, Dict, Type
 
 logger = logging.getLogger(__name__)
 
 
 class GRADEAssessor:
-    """Implements GRADE assessment methodology."""
+    """
+    Implements GRADE assessment methodology.
 
-    def __init__(self, llm_provider: ClaudeProvider):
+    This is a generic assessor that works with dependency injection.
+    All dependencies (models, prompts, LLM provider, exceptions) are passed in.
+    """
+
+    def __init__(
+        self,
+        llm_provider: Any,
+        prompt_template: str,
+        models: Dict[str, Type],
+        exception_class: Type[Exception] = Exception
+    ):
         """
         Initialize GRADE assessor.
 
         Args:
-            llm_provider: LLM provider instance
+            llm_provider: LLM provider instance with complete_with_json method
+            prompt_template: Prompt template string for GRADE assessment
+            models: Dictionary mapping model names to model classes:
+                - 'GRADELevel': Enum for grade levels
+                - 'GRADEDomain': Enum for GRADE domains
+                - 'GRADEDomainAssessment': Domain assessment model
+                - 'GRADEAssessment': Overall assessment model
+                - 'StudyDesign': Enum for study designs
+            exception_class: Exception class to raise on errors (default: Exception)
         """
         self.llm = llm_provider
+        self.prompt_template = prompt_template
+        self.models = models
+        self.exception_class = exception_class
         logger.info("GRADEAssessor initialized")
 
     def assess_study(
         self,
-        paper: PaperInput,
-        characteristics: StudyCharacteristics,
-        hypothesis: Optional[Hypothesis] = None
-    ) -> GRADEAssessment:
+        paper: Any,
+        characteristics: Any,
+        hypothesis: Optional[Any] = None
+    ) -> Any:
         """
         Perform GRADE assessment.
 
@@ -89,7 +100,7 @@ class GRADEAssessor:
             logger.debug(f"GRADE starting level: {starting_level.value}")
 
             # Format prompt
-            prompt = MedicalPrompts.GRADE_ASSESSMENT.format(
+            prompt = self.prompt_template.format(
                 study_design=characteristics.study_design,
                 methods=methods[:4000],
                 results=results[:3000]
@@ -106,6 +117,11 @@ class GRADEAssessor:
             data = response["json_data"]
 
             # Parse domain assessments
+            GRADEDomain = self.models['GRADEDomain']
+            GRADEDomainAssessment = self.models['GRADEDomainAssessment']
+            GRADELevel = self.models['GRADELevel']
+            GRADEAssessment = self.models['GRADEAssessment']
+
             domain_assessments = []
             for domain_data in data["domains"]:
                 domain_enum = GRADEDomain(domain_data["domain"])
@@ -159,22 +175,22 @@ class GRADEAssessor:
             return assessment
 
         except KeyError as e:
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Failed to parse GRADE assessment: missing key {e}"
             ) from e
 
         except ValueError as e:
-            raise AssessmentError(
+            raise self.exception_class(
                 f"Invalid GRADE assessment value: {e}"
             ) from e
 
         except Exception as e:
             logger.error(f"Error in GRADE assessment: {e}", exc_info=True)
-            raise AssessmentError(
+            raise self.exception_class(
                 f"GRADE assessment failed: {e}"
             ) from e
 
-    def _determine_starting_level(self, study_design: StudyDesign) -> GRADELevel:
+    def _determine_starting_level(self, study_design: Any) -> Any:
         """
         Determine starting GRADE level based on study design.
 
@@ -184,7 +200,7 @@ class GRADEAssessor:
         - Systematic reviews/meta-analyses not assessed (would assess underlying studies)
 
         Args:
-            study_design: Type of study design
+            study_design: Type of study design (enum)
 
         Returns:
             Starting GRADE level
@@ -192,6 +208,9 @@ class GRADEAssessor:
         Raises:
             ValueError: If study design is unknown/unsupported
         """
+        StudyDesign = self.models['StudyDesign']
+        GRADELevel = self.models['GRADELevel']
+
         design_to_level = {
             StudyDesign.RCT: GRADELevel.HIGH,
             StudyDesign.COHORT: GRADELevel.LOW,
